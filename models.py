@@ -35,16 +35,17 @@ limitations under the License.
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import function
 from module import FA_wrapper, TrainingHook
-
 
 class NetworkBuilder(nn.Module):
     """
     This version of the network builder assumes stride-2 pooling operations.
     """
-    def __init__(self, topology, input_size, input_channels, label_features, train_batch_size, train_mode, dropout, conv_act, hidden_act, output_act, fc_zero_init, device):
+    def __init__(self, topology, input_size, input_channels, label_features, train_batch_size, train_mode, dropout, conv_act, hidden_act, output_act, fc_zero_init, loss, device):
         super(NetworkBuilder, self).__init__()
+        self.apply_softmax = (output_act == "none") and (loss == "CE")
 
         self.layers = nn.ModuleList()
         if (train_mode == "DFA") or (train_mode == "sDFA"):
@@ -115,7 +116,10 @@ class NetworkBuilder(nn.Module):
             x = self.layers[i](x, labels, self.y)
         
         if x.requires_grad and (self.y is not None):
-            self.y.data.copy_(x.data) # in-place update, only happens with (s)DFA
+            if self.apply_softmax:
+                self.y.data.copy_(F.softmax(input=x.data, dim=1)) # in-place update, only happens with (s)DFA
+            else:
+                self.y.data.copy_(x.data) # in-place update, only happens with (s)DFA
         
         return x
 
